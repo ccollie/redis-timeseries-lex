@@ -1,0 +1,23 @@
+{
+  "name": "redis-timeseries-lex",
+  "description": "TimeSeries API built upon Redis",
+  "version": "0.1.0",
+  "main": "index.js",
+  "license": "MIT",
+  "author": "Clayton Collie",
+  "devDependencies": {
+    "ioredis": "^4.11.1",
+    "jest": "^24.8.0",
+    "msgpack": "^1.0.2",
+    "p-all": "^2.1.0"
+  },
+  "keywords": [
+    "Redis",
+    "Timeseries",
+    "lua"
+  ],
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {}
+}
