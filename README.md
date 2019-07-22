@@ -4,7 +4,7 @@ Redis Timeseries Lex
 Redis Timeseries is a Lua library implementing queryable time series on top of Redis using
 [lexicographically sorted sets](https://redislabs.com/redis-best-practices/time-series/lexicographic-sorted-set-time-series/).
 
-#####Encoding
+##### Encoding
 Each data point is stored as a ZSET entry with score 0 and value in the form `timestamp|value`, 
 where `value` is a set of arbitrary key value pairs encoded using message pack. The encoding is to preserve space, as
 well as to preserve numeric values.
@@ -30,12 +30,12 @@ the `REDIS_URL` environment variable:
 REDIS_URL='redis://host:port' npm run test
 ```
 
-####Structure
+#### Structure
 We recommend using
 [git submodules](http://git-scm.com/book/en/Git-Tools-Submodules) to keep
-[redis-timeseries-lua](https://github.com/ccollie/redis-timeseries-lua) in your bindings.
+[redis-timeseries-lua](https://github.com/ccollie/redis-timeseries-lex) in your bindings.
 
-####Usage
+#### Usage
 Load the script into redis, using [SCRIPT LOAD](https://redis.io/commands/script-load), or better yet,
 use any of the redis client libraries available for the programming language of your choice. The docs
 assumes that you have successfully done so and have acquired the associated `sha`. For all implemented 
@@ -229,7 +229,7 @@ evalsha b91594bd37521... 1 wait_time incrBy 1564632000000 count 1 value 2000
 ```
 
 ## Querying <a name="querying"></a>
-###range/revrange/poprange <a name="command-range"></a>
+### range/revrange/poprange <a name="command-range"></a>
 Query a timeseries by range and optionally aggregate the result. *`revrange`* returns the range of members 
 in reverse order of timestamp, but is otherwise to its non-reversed counterpart. `poprange` functions similarly to `range`,
 but removes the data in the range before returning it.
