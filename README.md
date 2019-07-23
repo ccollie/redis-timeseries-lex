@@ -33,7 +33,7 @@ REDIS_URL='redis://host:port' npm run test
 #### Structure
 We recommend using
 [git submodules](http://git-scm.com/book/en/Git-Tools-Submodules) to keep
-[redis-timeseries-lua](https://github.com/ccollie/redis-timeseries-lex) in your bindings.
+[redis-timeseries-lex](https://github.com/ccollie/redis-timeseries-lex) in your bindings.
 
 #### Usage
 Load the script into redis, using [SCRIPT LOAD](https://redis.io/commands/script-load), or better yet,
