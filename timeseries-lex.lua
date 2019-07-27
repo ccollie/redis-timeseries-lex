@@ -1117,8 +1117,8 @@ function Timeseries.set(key, timestamp, ...)
     local count = 0
     local parse = parse_input
     for i = 1, #values, 2 do
-        local name = values[i + 1]
-        hash[name] = parse(values[i + 2])
+        local name = values[i]
+        hash[name] = parse(values[i + 1])
         count = count + 1
     end
 
