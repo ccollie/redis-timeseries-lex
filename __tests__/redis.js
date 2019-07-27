@@ -156,6 +156,13 @@ async function getRange(client, key, min, max, ...args) {
 async function getRevRange(client, key, min, max, ...args) {
   return getRangeEx(client, 'revrange', key, min, max, ...args);
 }
+
+async function copy(client, src, dest, min, max, ...args) {
+  const sha = client.scriptsSet['timeseries'].sha;
+  
+  return client.evalsha(sha, 2, src, dest, 'copy', min, max, ...args);
+}
+
 module.exports = {
   createClient,
   insertData,
@@ -163,5 +170,6 @@ module.exports = {
   getRange,
   getRevRange,
   parseObjectResponse,
-  parseMessageResponse
+  parseMessageResponse,
+  copy
 };

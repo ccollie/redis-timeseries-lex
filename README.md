@@ -354,3 +354,22 @@ range and aggregation responses are sent using a redis multi-bulk reply.
 ```
 evalsha b91594bd37521... 1 purchases range - + FILTER amount>=5000 FORMAT json
 ```
+
+### copy <a name="command-copy"></a>
+Executes a `range` and copies the result to another key.
+
+```bash
+evalsha sha 2 src dest min max [FILTER condition ....] [AGGREGATION aggKey timeBucket] [LABELS label ....] [REDACT field ...] [STORAGE ["timeseries"|"hash"]]
+```
+
+- `key` the timeseries redis key
+- `min` the minimum timestamp value. The special character `-` can be used to specify the smallest timestamp
+- `max` the maximum timestamp value. The special character `+` can be used to specify the largest timestamp
+
+`min` and `max` specify an inclusive range.
+
+#### Options <a name="options"></a>
+All options for `range` are accepted with the exception of `FORMAT`. In addition we may specify a `STORAGE` option
+
+- `timeseries` (default) store results in a timeseries sorted set
+- `hash` stores the result in a hash where the key is the timestamp
