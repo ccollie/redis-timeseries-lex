@@ -542,6 +542,16 @@ local AGGREGATION_RETURNS_TABLE = {
     count_distinct = 1
 }
 
+local ALL_OPTIONS = {
+    LIMIT = 1,
+    AGGREGATION = 1,
+    FILTER = 1,
+    LABELS = 1,
+    REDACT = 1,
+    FORMAT = 1,
+    STORAGE = 1
+}
+
 local PARAMETER_OPTIONS = {
     LIMIT = 1,
     AGGREGATION = 1,
@@ -551,11 +561,24 @@ local PARAMETER_OPTIONS = {
     FORMAT = 1
 }
 
+local COPY_OPTIONS = {
+    LIMIT = 1,
+    AGGREGATION = 1,
+    FILTER = 1,
+    LABELS = 1,
+    REDACT = 1,
+    STORAGE = 1
+}
+
 local FORMAT_VALUES = {
     json = 1,
     msgpack = 1
 }
 
+local STORAGE_VALUES = {
+    timeseries = 1,
+    hash = 1
+}
 
 -- Returns a predicate function that matches
 -- *all* of the given predicate functions.
@@ -613,7 +636,7 @@ local function parse_filter(args, i)
     while i <= len do
         expr = args[i]
         u_expr = string.upper(expr)
-        if (PARAMETER_OPTIONS[u_expr]) then
+        if (ALL_OPTIONS[u_expr]) then
             break
         end
 
@@ -712,7 +735,7 @@ local function parse_range_params(valid_options, min, max, ...)
             result.labels = {}
             while i <= #arg do
                 local key = arg[i]
-                if (PARAMETER_OPTIONS[string.upper(key)]) then
+                if (ALL_OPTIONS[string.upper(key)]) then
                     break
                 end
                 result.labels[key] = 1
@@ -724,7 +747,7 @@ local function parse_range_params(valid_options, min, max, ...)
             result.redacted = {}
             while i <= #arg do
                 local key = arg[i]
-                if (PARAMETER_OPTIONS[string.upper(key)]) then
+                if (ALL_OPTIONS[string.upper(key)]) then
                     break
                 end
                 result.redacted[key] = 1
@@ -743,6 +766,12 @@ local function parse_range_params(valid_options, min, max, ...)
             local format = string.lower(arg[i] or '')
             assert(FORMAT_VALUES[format], 'FORMAT: Expecting "json" or "msgpack"')
             result.format = format
+            i = i + 1
+        elseif (option_name == 'STORAGE') then
+            assert(not result.storage, 'STORAGE already set')
+            local storage = string.lower(arg[i] or '')
+            assert(STORAGE_VALUES[storage], 'STORAGE: Expecting "timeseries" or "hash", got "' .. storage .. '"')
+            result.storage = storage
             i = i + 1
         end
     end
@@ -1060,6 +1089,7 @@ function Timeseries._get(remove, key, timestamp, ...)
         return format_result(to_hash(result), params.format)
     end
 end
+
 -- Get the value associated with *timestamp*
 function Timeseries.get(key, timestamp, ...)
     return Timeseries._get(false, key, timestamp, ...)
@@ -1290,6 +1320,94 @@ function Timeseries.times(key, min, max)
     return result
 end
 
+local function storeHash(dest, range)
+    local args = {}
+    for _, val in ipairs(range) do
+        local ts = val[1]
+        local data = val[2]
+
+        if type(data) == 'table' then
+            data = cjson.encode( to_hash(data) )
+        end
+        args[#args + 1] = tostring(ts)
+        args[#args + 1] = data
+    end
+    redis.call('hmset', dest, unpack(args))
+end
+
+local function storeTimeseries(dest, range)
+    for _, val in ipairs(range) do
+        local ts = val[1]
+        local data = val[2]
+        if type(data) ~= 'table' then
+            data = {'value', data}
+        end
+        Timeseries.add(dest, ts, unpack(data))
+    end
+end
+
+--- copy data from a timeseries and store it in another key
+function Timeseries.copy(key, dest, min, max, ...)
+
+    local function handle_aggregation(range, agg_params)
+        local values = {}
+        for _, v in ipairs(range) do
+            local ts = v[1]
+            local hash = v[2] or {}
+            for i = 1, #hash, 2 do
+                table.insert(values, { ts, hash[i + 1] })
+            end
+        end
+        return aggregate(values, agg_params.aggregateType, agg_params.timeBucket)
+    end
+
+    local params = parse_range_params(COPY_OPTIONS, min, max, ...)
+    local storage = params.storage or 'timeseries'
+    local data = base_range('zrangebylex', key, params)
+
+    if (#data == 0) then
+        return 0
+    end
+
+    -- Fast path if no filtering or transformation
+    if (params.filter == nil and params.aggregate == nil and storage == 'timeseries') and (params.labels == nil) and (params.redacted == nil) then
+        for _, val in ipairs(data) do
+            redis.call('zadd', dest, 0, val)
+        end
+        return #data
+    end
+
+    if (params.aggregate ~= nil) then
+        -- if we're aggregating, the user should select a label
+        if (params.labels) then
+            if (#params.labels > 1) then
+                error('Timeseries.copy: only 1 label should be selected for aggregation')
+                for k, _ in ipairs(params.labels) do
+                    label = k
+                    break
+                end
+            end
+        else
+            params.label = { value = 1 }
+        end
+    end
+
+    local range = process_range(data, params)
+    if params.aggregate ~= nil then
+        range = handle_aggregation(range, params.aggregate)
+    end
+
+    if (#range) then
+        if storage == 'timeseries' then
+            storeTimeseries(dest, range)
+        else
+            storeHash(dest, range)
+        end
+    end
+
+    return #range
+end
+
 ---------
 local UpperMap
 
@@ -1304,13 +1422,18 @@ if (command == nil) then
             end
         end
     end
-    command = UpperMap[string.upper(command_name)]
+    command_name = string.upper(command_name)
+    command = UpperMap[command_name]
 end
 if (command == nil) then
     error('Timeseries: unknown command ' .. command_name)
 end
 
 -- ts_debug('running ' .. command_name .. '(' .. KEYS[1] .. ',' .. table.tostring(ARGV) .. ')')
+
+if (command_name == 'copy') or (command_name == 'COPY') then
+    return command(KEYS[1], KEYS[2], unpack(ARGV))
+end
 
 local result = command(KEYS[1], unpack(ARGV))
 
