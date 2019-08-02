@@ -277,6 +277,10 @@ end
 local function parse_range_value(candidate, name)
     assert(candidate, 'value expected for ' .. name)
     local first = candidate:sub(1, 1)
+    if (first == '*') then
+        local val = redis.call('TIME')
+        return tonumber(val[1]), false
+    end
     if (first == '+') or (first == '-') or (first == '[') or (first == '(') then
         return candidate, true
     else
@@ -992,9 +996,17 @@ local Timeseries = {
 
 Timeseries.__index = Timeseries;
 
+local function parse_timestamp(ts)
+    if (ts == '*') then
+        local val = redis.call('TIME')
+        return val[1]
+    end
+    return ts
+end
+
 -- Add timestamp-value pairs to the Timeseries
 function Timeseries.add(key, timestamp, ...)
-    timestamp = assert(tonumber(timestamp), 'timestamp should be a number')
+    timestamp = assert(parse_timestamp(timestamp), 'timestamp should be a number')
     local values = get_key_val_varargs('add', ...)
     local parse_value = parse_input
     local len = #values
@@ -1014,7 +1026,7 @@ function Timeseries.del(key, ...)
     local min, max, entries
     local count = 0
     for _, timestamp in ipairs(args) do
-        timestamp = assert(tonumber(timestamp), 'del: timestamp must be a number')
+        timestamp = assert(parse_timestamp(timestamp), 'del: timestamp must be a number')
         min = '[' .. tostring(timestamp) .. SEPARATOR
         max = '(' .. tostring(timestamp + 1) .. SEPARATOR
         entries = redis.call('zrangebylex', key, min, max)
@@ -1053,7 +1065,7 @@ end
 
 -- Check if *timestamp* exists in the timeseries
 function Timeseries.exists(key, timestamp)
-    local value = get_single_value(key, timestamp, 'exists')
+    local value = get_single_value(key, parse_timestamp(timestamp), 'exists')
     if value ~= nil then
         return 1
     else
@@ -1082,7 +1094,7 @@ end
 
 function Timeseries._get(remove, key, timestamp, ...)
     local params = parse_range_params({ LABELS = 1, REDACT = 1, FORMAT = 1 }, timestamp, timestamp, ...)
-    local entry = get_single_value(key, timestamp, params, 'get')
+    local entry = get_single_value(key, parse_timestamp(timestamp), params, 'get')
     if entry then
         local result = entry.value
         if (remove) then
@@ -1111,13 +1123,13 @@ end
 
 -- Set the values of a hash associated with *timestamp*
 function Timeseries.set(key, timestamp, ...)
-    local current = get_single_value(key, timestamp, 'set')
+    local current = get_single_value(key, parse_timestamp(timestamp), 'set')
     local hash
     if (current == nil) then
         hash = {}
     else
         hash = to_hash(current.value)
-        assert(type(hash) == "table", 'set:. The value at ' .. key .. '(' .. tonumber(timestamp) .. ') is not a hash')
+        assert(type(hash) == "table", 'set:. The value at ' .. key .. '(' .. tostring(timestamp) .. ') is not a hash')
     end
 
     local values = get_key_val_varargs('set', ...)
@@ -1192,12 +1204,13 @@ end
 -- increment value(s) at key(s)
 --- incrby(key, ts, name1, value1, name2, value2, ...)
 function Timeseries.incrBy(key, timestamp, ...)
+    timestamp = parse_timestamp(timestamp)
     local current = get_single_value(key, timestamp, {}, 'incrBy')
 
     local hash = {}
     if (current ~= nil) then
         hash = to_hash(current.value)
-        assert(type(hash) == "table", 'incrBy. The value at ' .. key .. '(' .. tonumber(timestamp) .. ') is not a hash')
+        assert(type(hash) == "table", 'incrBy. The value at ' .. key .. '(' .. tostring(timestamp) .. ') is not a hash')
     end
 
     local values = get_key_val_varargs('incrby', ...)

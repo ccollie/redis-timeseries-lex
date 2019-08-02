@@ -40,6 +40,23 @@ describe('add', () => {
   });
 
 
+  it('should return the timestamp', async () => {
+    const data = { beers: 30 };
+    const ts = await add( 3000, data ) ;
+
+    expect(parseInt(ts)).toEqual(3000);
+  });
+
+
+  it('should interpret "*" as the current server TIME', async () => {
+    const data = { beers: 30 };
+    const ts = await add( '*', data );
+    const time = await client.time();
+    const timestamp = time[0];
+    expect(ts).toEqual(timestamp);
+  });
+
+
   it('should allow arbitrary data to be associated with a timestamp', async () => {
 
     const data = {
