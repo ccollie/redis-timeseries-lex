@@ -16,6 +16,15 @@ describe('aggregation', () => {
     return client.quit();
   });
 
+  function round(num, dec){
+    if ((typeof num !== 'number') || (typeof dec !== 'number'))
+      return false;
+
+    const num_sign = num >= 0 ? 1 : -1;
+
+    return (Math.round((num*Math.pow(10,dec))+(num_sign*0.0001))/Math.pow(10,dec)).toFixed(dec);
+  }
+
   // aggregation
 
   async function insertAggregationData(key = TIMESERIES_KEY) {
@@ -144,6 +153,7 @@ describe('aggregation', () => {
     });
     bucketIds.forEach(id => {
       buckets[id] = calc_stats(buckets[id]);
+      buckets[id].std = round(buckets[id].std, 5);
     });
 
     const expected = Array.from(bucketIds).sort().map(ts => [ts, buckets[ts]]);
@@ -154,6 +164,7 @@ describe('aggregation', () => {
       const value = data.value;
       Object.keys(value).forEach(k => {
         value[k] = parseFloat(value[k]);
+        if (k === 'std') value[k] = round(value[k], 5);
       });
       return [ts, value];
     });
