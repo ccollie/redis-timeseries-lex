@@ -954,6 +954,14 @@ local function aggregate(range, aggregationType, timeBucket)
                 result[bucket] = false  -- how do we return nil back to redis ????
             end
         end
+    elseif (aggregationType == 'distinct') then
+        for bucket, values in pairs(result) do
+            local data = {}
+            for k, _ in pairs(values) do
+                data[#data + 1] = k
+            end
+            result[bucket] = data
+        end
     elseif (aggregationType == 'rate') then
         for bucket, count in pairs(result) do
             result[bucket] = count / timeBucket

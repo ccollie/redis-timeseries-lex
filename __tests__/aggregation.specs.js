@@ -194,11 +194,14 @@ describe('aggregation', () => {
       slot[rec.job] = 1
     });
 
-    const expected = Array.from(bucketIds).sort().map(ts => [ts, {job: buckets[ts]} ]);
+    const expected = Array.from(bucketIds).sort().map(ts => [ts, {job: Object.keys(buckets[ts]).sort()} ]);
 
     const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'LABELS', 'job', 'AGGREGATION', 'distinct', 10);
 
     // for now, just make sure we have objects returned with the proper shape
+    response.forEach(x => {
+      x[1].job.sort();
+    });
 
     expect(response).toEqual(expected);
   });
