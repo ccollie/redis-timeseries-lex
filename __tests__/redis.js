@@ -109,7 +109,7 @@ function parseObjectResponse(reply) {
     let key = reply[i];
     let val = reply[i + 1];
     if (Array.isArray(val)) {
-      data[key] = parseObjectResponse(val);
+      data[key] = val;
     } else {
       data[key] = val;
     }
@@ -159,7 +159,7 @@ async function getRevRange(client, key, min, max, ...args) {
 
 async function copy(client, src, dest, min, max, ...args) {
   const sha = client.scriptsSet['timeseries'].sha;
-  
+
   return client.evalsha(sha, 2, src, dest, 'copy', min, max, ...args);
 }
 
