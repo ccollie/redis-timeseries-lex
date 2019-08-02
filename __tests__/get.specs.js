@@ -44,6 +44,14 @@ describe('get', () => {
     expect(value).toEqual(['value', 200]);
   });
 
+  it('should substitute "*" for the current server time"', async () => {
+    await insertData('*', 200);
+
+    const value = await getValue('*');
+
+    expect(value).toEqual(['value', 200]);
+  });
+
   it('should return all values if no keys are specified', async () => {
     const states = {
       active: 1,
