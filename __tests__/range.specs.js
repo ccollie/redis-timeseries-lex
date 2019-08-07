@@ -127,7 +127,7 @@ describe('range', () => {
       }
 
       const response = await get_range(start_ts, start_ts + data.length, 'FILTER', ...strFilters);
-      const actual = response.map(x => x[1].value);
+      const actual = response.map(x => x[1]);
       const expected = data.filter(predicate);
       try {
         expect(actual).toEqual(expected);

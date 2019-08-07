@@ -109,7 +109,7 @@ function parseObjectResponse(reply) {
     let key = reply[i];
     let val = reply[i + 1];
     if (Array.isArray(val)) {
-      data[key] = val;
+      data[key] = parseObjectResponse(val);
     } else {
       data[key] = val;
     }

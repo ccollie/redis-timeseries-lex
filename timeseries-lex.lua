@@ -840,116 +840,125 @@ local function get_single_value(key, timestamp, options, name)
     return nil
 end
 
-local function aggregate(range, aggregationType, timeBucket)
-    local result = {}
-    local ts, key, val, current
-    local is_number
-    local is_possibly_number = is_possibly_number
-
-    -- localize globals used in loop
-    local min = math.min
-    local max = math.max
-    local extra_large = math.huge
-    local extra_small = -math.huge
-
-    local bucket_list = {}
-
-    -- ts_debug('aggregation range = ' .. table.tostring(range) .. ' bucket = ' .. timeBucket)
-
-    for _, kv in ipairs(range) do
-        ts = kv[1] - (kv[1] % timeBucket)
-        val = kv[2]
-        key = tostring(ts)
-        current = result[key]
-        if (current == nil) then
-            -- first time this bucket appears
-            bucket_list[#bucket_list + 1] = { ts, key }
-        end
-        if (aggregationType == 'count') or (aggregationType == 'rate') then
-            result[key] = tonumber(current or 0) + 1
-        elseif aggregationType == 'sum' then
-            val = tonumber(val) or 0
-            result[key] = tonumber(current or 0) + val
-        elseif aggregationType == 'min' then
-            if (val ~= nil) then
-                is_number, val = is_possibly_number(val)
-                if (is_number) then
-                    result[key] = min(current or extra_large, val)
-                else
-                    current = current or ''
-                    if (val < current) then
-                        result[key] = val
-                    else
-                        result[key] = current
-                    end
-                end
-            end
-        elseif aggregationType == 'max' then
-            if (val ~= nil) then
-                is_number, val = is_possibly_number(val)
-                if (is_number) then
-                    result[key] = max(current or extra_small, val)
-                else
-                    current = current or ''
-                    if (val > current) then
-                        result[key] = val
-                    else
-                        result[key] = current
-                    end
-                end
-            end
-        elseif (aggregationType == 'avg') or (aggregationType == 'stats') then
-            val = tonumber(val)
-            if val ~= nil then
-                result[key] = result[key] or {}
-                table.insert(result[key], val)
-            end
-        elseif aggregationType == 'first' then
-            if (val ~= nil) then
-                if (result[key] == nil) then
-                    result[key] = val
-                end
-            end
-        elseif aggregationType == 'last' then
-            result[key] = val
-        elseif aggregationType == 'range' then
-            val = tonumber(val)
-            if val ~= nil then
-                result[key] = result[key] or { min = extra_large, max = extra_small }
-                local min_max = result[key]
-                min_max.min = min(min_max.min, val)
-                min_max.max = max(min_max.max, val)
-            end
-        elseif aggregationType == 'data' then
-            --- all values
+local AGGR_ITERATION_FUNCS = {
+    count = function(result, key, val)
+        result[key] = tonumber(result[key] or 0) + 1
+    end,
+    sum = function(result, key, val)
+        val = tonumber(val) or 0
+        result[key] = tonumber(result[key] or 0) + val
+    end,
+    avg = function(result, key, val)
+        val = tonumber(val)
+        if val ~= nil then
             result[key] = result[key] or {}
             table.insert(result[key], val)
-        elseif aggregationType == 'distinct' then
-            --- distinct values
-            result[key] = result[key] or {}
-            result[key][tostring(val)] = 1
-        elseif aggregationType == 'count_distinct' then
-            --- count distinct values
-            result[key] = result[key] or {}
-            local slot = result[key]
-            local val_key = tostring(val)
-            slot[val_key] = tonumber(slot[val_key] or 0) + 1
         end
+    end,
+    stats = function(result, key, val)
+        val = tonumber(val)
+        if val ~= nil then
+            result[key] = result[key] or {}
+            table.insert(result[key], val)
+        end
+    end,
+    rate = function(result, key, val)
+        result[key] = tonumber(result[key] or 0) + 1
+    end,
+    min = function(result, key, val)
+        local is_number
+        local current = result[key]
+        if (val ~= nil) then
+            is_number, val = is_possibly_number(val)
+            if (is_number) then
+                result[key] = math.min(current or math.huge, val)
+            else
+                current = current or ''
+                if (val < current) then
+                    result[key] = val
+                else
+                    result[key] = current
+                end
+            end
+        end
+    end,
+    max = function(result, key, val)
+        local is_number
+        local current = result[key]
+        if (val ~= nil) then
+            is_number, val = is_possibly_number(val)
+            if (is_number) then
+                result[key] = math.max(current or -math.huge, val)
+            else
+                current = current or ''
+                if (val > current) then
+                    result[key] = val
+                else
+                    result[key] = current
+                end
+            end
+        end
+    end,
+    range = function(result, key, val)
+        val = tonumber(val)
+        if val ~= nil then
+            result[key] = result[key] or { min = math.huge, max = -math.huge }
+            local min_max = result[key]
+            min_max.min = math.min(min_max.min, val)
+            min_max.max = math.max(min_max.max, val)
+        end
+    end,
+    first = function(result, key, val)
+        if (val ~= nil) then
+            if (result[key] == nil) then
+                result[key] = val
+            end
+        end
+    end,
+    last = function(result, key, val)
+        result[key] = val
+    end,
+    distinct = function(result, key, val)
+        --- distinct values
+        result[key] = result[key] or {}
+        result[key][tostring(val)] = 1
+    end,
+    count_distinct = function(result, key, val)
+        --- count distinct values
+        result[key] = result[key] or {}
+        local slot = result[key]
+        local val_key = tostring(val)
+        slot[val_key] = tonumber(slot[val_key] or 0) + 1
+    end,
+    data = function(result, key, val)
+        result[key] = result[key] or {}
+        table.insert(result[key], val)
     end
+}
 
-    if (aggregationType == 'avg') then
-        local temp = {}
+local AGGR_FINALIZE_FUNCS = {
+    default = function(result)
+        return result
+    end,
+    avg = function(result)
         for bucket, data in pairs(result) do
-            temp[bucket] = stats.mean(data)
+            result[bucket] = stats.mean(data)
         end
-        result = temp
-    elseif (aggregationType == 'stats') then
-        local temp = {}
+        return result
+    end,
+    stats = function(result)
         for bucket, data in pairs(result) do
-            temp[bucket] = stats.basic(data)
+            local stat = stats.basic(data)
+            local temp = {}
+            for k, v in pairs(stat) do
+                temp[#temp + 1] = k
+                temp[#temp + 1] = v
+            end
+            result[bucket] = temp
         end
-        result = temp
-    elseif (aggregationType == 'range') then
+        return result
+    end,
+    range = function(result)
         for bucket, min_max in pairs(result) do
             if (min_max ~= nil) then
                 result[bucket] = (min_max.max - min_max.min)
@@ -957,19 +966,49 @@ local function aggregate(range, aggregationType, timeBucket)
                 result[bucket] = false  -- how do we return nil back to redis ????
             end
         end
-    elseif (aggregationType == 'distinct') then
+        return result
+    end,
+    distinct = function(result)
         for bucket, values in pairs(result) do
             local data = {}
-            for k, _ in pairs(values) do
+            for k, v in pairs(values) do
                 data[#data + 1] = k
+                data[#data + 1] = v
             end
             result[bucket] = data
         end
-    elseif (aggregationType == 'rate') then
+        return result
+    end,
+    rate = function(result, timeBucket)
         for bucket, count in pairs(result) do
             result[bucket] = count / timeBucket
         end
+        return result
     end
+}
+
+local function aggregate(range, aggregationType, timeBucket)
+    local result = {}
+    local ts, key, val
+    local bucket_list = {}
+
+    -- ts_debug('aggregation range = ' .. table.tostring(range) .. ' bucket = ' .. timeBucket)
+
+    local iterate = AGGR_ITERATION_FUNCS[aggregationType]
+    local finalize = AGGR_FINALIZE_FUNCS[aggregationType] or AGGR_FINALIZE_FUNCS.default
+
+    for _, kv in ipairs(range) do
+        ts = kv[1] - (kv[1] % timeBucket)
+        val = kv[2]
+        key = tostring(ts)
+        if (result[key] == nil) then
+            -- first time this bucket appears
+            bucket_list[#bucket_list + 1] = { ts, key }
+        end
+        iterate(result, key, val)
+    end
+
+    result = finalize(result, timeBucket)
 
     -- use bucket_list to transform hash into properly ordered indexed array
     local final = {}

@@ -209,16 +209,16 @@ describe('aggregation', () => {
       slot[rec.job] = 1
     });
 
-    const expected = Array.from(bucketIds).sort().map(ts => [ts, {job: Object.keys(buckets[ts]).sort()} ]);
+    const expected = Array.from(bucketIds).sort().map(ts => [ts, Object.keys(buckets[ts]).sort()]);
 
     const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'LABELS', 'job', 'AGGREGATION', 'distinct', 10);
 
     // for now, just make sure we have objects returned with the proper shape
-    response.forEach(x => {
-      x[1].job.sort();
+    const actual = response.map(x => {
+      return [x[0], Object.keys(x[1].job).sort()];
     });
 
-    expect(response).toEqual(expected);
+    expect(actual).toEqual(expected);
   });
 
   test('count_distinct', async () => {
@@ -273,7 +273,7 @@ describe('aggregation', () => {
 
     const states = ['ready', 'active', 'waiting', 'complete'];
 
-    for (let i = 0; i < samples_count; i++, ts++) {
+    for (let i = 0; i < samples_count; i++) {
       const state = states[i % states.length];
       data.push({
         state,
