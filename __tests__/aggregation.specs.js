@@ -57,6 +57,10 @@ describe('aggregation', () => {
     expect(actual).toEqual(expected)
   }
 
+  function random(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
   function calc_stats(values) {
     let count = 0;
     let sum = 0;
@@ -260,4 +264,35 @@ describe('aggregation', () => {
 
     expect(actual).toEqual(expected);
   });
+
+  test('multiple labels', async () => {
+    const start_ts = 1488823384;
+    const samples_count = 50;
+
+    const data = [];
+
+    const states = ['ready', 'active', 'waiting', 'complete'];
+
+    for (let i = 0; i < samples_count; i++, ts++) {
+      const state = states[i % states.length];
+      data.push({
+        state,
+        num: random(5, 100),
+        value: random(10, 100)
+      })
+    }
+    await insertData(client, TIMESERIES_KEY, start_ts, samples_count, data);
+
+    const args = ['LABELS', 'num', 'value', 'AGGREGATION', 'sum', 10];
+
+    const response = await getRange(client, TIMESERIES_KEY, '-', '+', ...args);
+
+    response.forEach(x => {
+      const agg = x[1];
+      expect(agg).toHaveProperty('value');
+      expect(agg).toHaveProperty('num');
+    })
+
+  });
+
 });

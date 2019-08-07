@@ -950,7 +950,6 @@ local function aggregate(range, aggregationType, timeBucket)
         end
         result = temp
     elseif (aggregationType == 'range') then
-        ts_debug('result = ', table.tostring(result))
         for bucket, min_max in pairs(result) do
             if (min_max ~= nil) then
                 result[bucket] = (min_max.max - min_max.min)
@@ -1253,12 +1252,19 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
         local result = {}
         local bucket_list = {}
         local has_timestamps = false
-        for hkey, values in pairs(by_key) do
+        local temp
+        for key, values in pairs(by_key) do
             local buckets = aggregate(values, agg_params.aggregateType, agg_params.timeBucket)
             for _, val in pairs(buckets) do
                 k = tostring(val[1])
                 result[k] = result[k] or {}
-                result[k] = { hkey, val[2] }
+                temp = result[k]
+                if (format == 'json') or (format == 'msgpack') then
+                    temp[key] = val[2]
+                else
+                    temp[#temp + 1] = key
+                    temp[#temp + 1] = val[2]
+                end
                 if not has_timestamps then
                     bucket_list[#bucket_list + 1] = { val[1], k }
                 end
@@ -1270,7 +1276,7 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
         local final = {}
         if (format == 'json') or (format == 'msgpack') then
             for i, ts in ipairs(bucket_list) do
-                final[i] = { ts[1], to_hash(result[ts[2]]) }
+                final[i] = { ts[1], result[ts[2]] }
             end
             final = format_result(final, format)
         else
