@@ -452,30 +452,26 @@ local function parse_filter_condition(exp)
         end
     end
 
-    local function contains(_field, _matches, _should_contain)
-        -- transform indexed array to an associative hash for faster comparisons
-        local temp = {}
-        for _, val in ipairs(_matches) do
-            temp[tostring(val)] = 1
-        end
-        _matches = temp
+    local function contains(_field, _matches)
         return function(v)
             local matches = _matches
-            local should_contain = _should_contain
             local field = _field
-            local match_found = matches[tostring(v[field])] ~= nil
-            if (should_contain) then
-                return match_found == true
-            else
-                return match_found == false
-            end
+            return matches[tostring(v[field])] ~= nil
+        end
+    end
+
+    local function not_contains(_field, _matches)
+        return function(v)
+            local matches = _matches
+            local field = _field
+            return matches[tostring(v[field])] == nil
         end
     end
 
     local function match_contains(cond)
         local values, _, field
         local ops = { '!=', '=' }
-        local should_contain = { false, true }
+        local contains_funcs = { not_contains, contains }
 
         for i, op in ipairs(ops) do
             local pattern = ID_CAPTURE_PATTERN .. op .. '(%b())'
@@ -488,7 +484,13 @@ local function parse_filter_condition(exp)
                 if #matches == 0 then
                     error('No values found for contains match')
                 end
-                return contains(field, matches, should_contain[i])
+                -- transform indexed array to an associative hash for faster comparisons
+                local temp = {}
+                for _, val in ipairs(matches) do
+                    temp[tostring(val)] = 1
+                end
+                matches = temp
+                return contains_funcs[i](field, matches)
             end
         end
 
