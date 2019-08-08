@@ -62,7 +62,7 @@ describe('range', () => {
     const data = [];
 
     for (let i = 1000; i < 10000; i += 1000) {
-      data.push( i  )
+      data.push( i )
     }
 
     await _insert_data( TIMESERIES_KEY , start_ts, data.length, data);
@@ -93,7 +93,6 @@ describe('range', () => {
         id: 1,
         name: "april",
         last_name: 'winters',
-        "class": "middle"
       },
       {
         id: 2,
@@ -109,13 +108,11 @@ describe('range', () => {
         id: 4,
         name: "april",
         last_name: 'black',
-        "class": "high"
       },
       {
         id: 5,
         name: "livia",
-        last_name: 'araujo',
-        "class": "high"
+        last_name: 'araujo'
       },
     ];
 
@@ -148,8 +145,8 @@ describe('range', () => {
     await _insert_data(TIMESERIES_KEY, start_ts, samples_count, 5);
 
     const expected = [[1488823000, 116], [1488823500, 500], [1488824000, 500], [1488824500, 384]];
-    const response = await get_range(start_ts, start_ts + samples_count, 'AGGREGATION', 'count', 500);
-    const actual = response.map(x => [x[0], x[1].value]);
+    const response = await get_range(start_ts, start_ts + samples_count, 'AGGREGATION', 500, 'count', 'value');
+    const actual = response.map(x => [x[0], x[1].value.count]);
     expect(actual).toEqual(expected);
   });
 

@@ -152,6 +152,13 @@ local function is_float(val)
     return type(val) == 'number' and (math.floor(val) ~= val)
 end
 
+local function possibly_convert_float(val)
+    if (type(val) == 'number' and (math.floor(val) ~= val)) then
+        return tostring(val)
+    end
+    return val
+end
+
 -- for return to redis
 -- not very sophisticated since our values are simple
 local function to_bulk_reply(val)
@@ -193,6 +200,16 @@ local function to_hash(value)
         result[value[k]] = value[k + 1]
     end
     return result
+end
+
+local function from_hash(table)
+    local i, data = 1, {}
+    for k, v in pairs(table) do
+        data[i] = k
+        data[i + 1] = v
+        i = i + 2
+    end
+    return data
 end
 
 -- value is raw value from zrangebylex
@@ -249,15 +266,7 @@ end
 
 local function store_value(key, timestamp, value, is_hash)
     if (is_hash) then
-        -- linearize
-        local data = {}
-        local i = 1
-        for k, v in pairs(value) do
-            data[i] = k
-            data[i + 1] = v
-            i = i + 2
-        end
-        value = data
+        value = from_hash(value)
     end
     local val = encode_value(timestamp, value)
     redis.call('zadd', key, 0, val)
@@ -545,6 +554,7 @@ local AGGREGATION_TYPES = {
 local AGGREGATION_RETURNS_TABLE = {
     data = 1,
     stats = 1,
+    distinct = 1,
     count_distinct = 1
 }
 
@@ -726,15 +736,29 @@ local function parse_range_params(valid_options, min, max, ...)
         elseif (option_name == 'AGGREGATION') then
             assert(not result.aggregate, 'A value for aggregate has already been set')
 
-            -- we should have aggregationType, timeBucket
-            local type = assert(string.lower(arg[i]), 'AGGREGATE: missing value for aggType')
-            assert(AGGREGATION_TYPES[type], 'AGGREGATE: invalid aggregation type : ' .. arg[i])
-            local timeBucket = assert(tonumber(arg[i + 1]), 'AGGREGATE: timeBucket must be a number')
+            local bucketSize = arg[i]
+            result.labels = {}
             result.aggregate = {
-                aggregateType = type,
-                timeBucket = timeBucket
+                timeBucket = assert(tonumber(bucketSize), 'AGGREGATE: timeBucket must be a number. Got "' .. bucketSize .. '"'),
+                fields = {}
             }
-            i = i + 2
+            i = i + 1
+            local agg, field
+            while i <= #arg do
+                agg = arg[i]
+                if (ALL_OPTIONS[string.upper(agg)]) then
+                    break
+                end
+                agg = assert(string.lower(agg), 'missing value for aggregate type')
+                assert(AGGREGATION_TYPES[agg], 'invalid aggregation type : "' .. agg ..'"')
+                i = i + 1
+                field = assert(arg[i], 'missing field in aggregate')
+                table.insert(result.aggregate.fields, { field, agg })
+                result.labels[field] = 1
+                i = i + 1
+            end
+            -- make sure some fields were specified
+            assert(#result.aggregate.fields, 'No fields specified for aggregation')
         elseif (option_name == "LABELS") then
             assert(not result.labels, 'LABELS option already specified')
             assert(not result.redacted, 'Either specify REDACT or LABELS, but not both')
@@ -940,11 +964,11 @@ local AGGR_ITERATION_FUNCS = {
 
 local AGGR_FINALIZE_FUNCS = {
     default = function(result)
-        return result
+        return possibly_convert_float(result)
     end,
     avg = function(result)
         for bucket, data in pairs(result) do
-            result[bucket] = stats.mean(data)
+            result[bucket] = possibly_convert_float( stats.mean(data) )
         end
         return result
     end,
@@ -954,7 +978,7 @@ local AGGR_FINALIZE_FUNCS = {
             local temp = {}
             for k, v in pairs(stat) do
                 temp[#temp + 1] = k
-                temp[#temp + 1] = v
+                temp[#temp + 1] = possibly_convert_float(v)
             end
             result[bucket] = temp
         end
@@ -963,7 +987,7 @@ local AGGR_FINALIZE_FUNCS = {
     range = function(result)
         for bucket, min_max in pairs(result) do
             if (min_max ~= nil) then
-                result[bucket] = (min_max.max - min_max.min)
+                result[bucket] = possibly_convert_float(min_max.max - min_max.min)
             else
                 result[bucket] = false  -- how do we return nil back to redis ????
             end
@@ -972,18 +996,13 @@ local AGGR_FINALIZE_FUNCS = {
     end,
     distinct = function(result)
         for bucket, values in pairs(result) do
-            local data = {}
-            for k, v in pairs(values) do
-                data[#data + 1] = k
-                data[#data + 1] = v
-            end
-            result[bucket] = data
+            result[bucket] = from_hash(values)
         end
         return result
     end,
     rate = function(result, timeBucket)
         for bucket, count in pairs(result) do
-            result[bucket] = count / timeBucket
+            result[bucket] = tostring(count / timeBucket)
         end
         return result
     end
@@ -994,9 +1013,7 @@ local function aggregate(range, aggregationType, timeBucket)
     local ts, key, val
     local bucket_list = {}
 
-    -- ts_debug('aggregation range = ' .. table.tostring(range) .. ' bucket = ' .. timeBucket)
-
-    local iterate = AGGR_ITERATION_FUNCS[aggregationType]
+    local iterate = assert(AGGR_ITERATION_FUNCS[aggregationType], 'invalid aggregate type "' .. tostring(aggregationType) .. '"')
     local finalize = AGGR_FINALIZE_FUNCS[aggregationType] or AGGR_FINALIZE_FUNCS.default
 
     for _, kv in ipairs(range) do
@@ -1160,7 +1177,6 @@ function Timeseries.pop(key, timestamp, ...)
     return Timeseries._get(true, key, timestamp, ...)
 end
 
-
 -- Set the values of a hash associated with *timestamp*
 function Timeseries.set(key, timestamp, ...)
     local current = get_single_value(key, parse_timestamp(timestamp), 'set')
@@ -1293,17 +1309,22 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
         local result = {}
         local bucket_list = {}
         local has_timestamps = false
-        local temp
-        for key, values in pairs(by_key) do
-            local buckets = aggregate(values, agg_params.aggregateType, agg_params.timeBucket)
+
+        for _, field_info in ipairs(agg_params.fields) do
+            local key = field_info[1]
+            local agg_type = field_info[2]
+
+            local buckets = aggregate(by_key[ key ], agg_type, agg_params.timeBucket)
             for _, val in pairs(buckets) do
                 k = tostring(val[1])
                 result[k] = result[k] or {}
-                temp = result[k]
+                result[k][key] = result[k][key] or {}
+
+                local temp = result[k][key]
                 if (format == 'json') or (format == 'msgpack') then
-                    temp[key] = val[2]
+                    temp[agg_type] = val[2]
                 else
-                    temp[#temp + 1] = key
+                    temp[#temp + 1] = agg_type
                     temp[#temp + 1] = val[2]
                 end
                 if not has_timestamps then
@@ -1324,12 +1345,8 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
             k = 1
             for _, ts in ipairs(bucket_list) do
                 final[k] = ts[1]
-                final[k + 1] = result[ts[2]]
+                final[k + 1] = to_bulk_reply(result[ts[2]])
                 k = k + 2
-            end
-            -- if no format was specified, we still need encoding if aggregation returns table
-            if (AGGREGATION_RETURNS_TABLE[agg_params.aggregateType]) then
-                final = to_bulk_reply(final)
             end
         end
         return final
@@ -1376,6 +1393,7 @@ function Timeseries.poprange(key, min, max, ...)
     return Timeseries._range(true, 'zrangebylex', key, min, max, ...);
 end
 
+
 -- list of timestamps between *min* and *max*
 function Timeseries.times(key, min, max)
     min = min or '-'
@@ -1418,15 +1436,55 @@ end
 function Timeseries.copy(key, dest, min, max, ...)
 
     local function handle_aggregation(range, agg_params)
-        local values = {}
+        local aggregate = aggregate
+        local by_key = {}
         for _, v in ipairs(range) do
             local ts = v[1]
             local hash = v[2] or {}
             for i = 1, #hash, 2 do
-                table.insert(values, { ts, hash[i + 1] })
+                local k = hash[i]
+                by_key[k] = by_key[k] or {}
+                table.insert(by_key[k], { ts, hash[i + 1] })
             end
         end
-        return aggregate(values, agg_params.aggregateType, agg_params.timeBucket)
+        local result = {}
+        local bucket_list = {}
+        local has_timestamps = false
+
+        for _, field_info in ipairs(agg_params.fields) do
+            local key = field_info[1]
+            local agg_type = field_info[2]
+
+            local buckets = aggregate(by_key[ key ], agg_type, agg_params.timeBucket)
+            for _, val in pairs(buckets) do
+                local value = val[2]
+                local k = tostring(val[1])
+                result[k] = result[k] or {}
+
+                local slot_key = key .. '_' .. agg_type
+                local temp = result[k]
+                if (type(value) == 'table') then
+                    for j = 1, #value, 2 do
+                        temp[#temp + 1] = slot_key .. '_' .. value[j]
+                        temp[#temp + 1] = value[j + 1]
+                    end
+                else
+                    temp[#temp + 1] = slot_key
+                    temp[#temp + 1] = value
+                end
+                if not has_timestamps then
+                    bucket_list[#bucket_list + 1] = { val[1], k }
+                end
+            end
+            has_timestamps = true
+        end
+
+        -- use bucket_list to transform hash into properly ordered indexed array
+        local final = {}
+        for i, ts in ipairs(bucket_list) do
+            final[i] = { ts[1], result[ts[2]] }
+        end
+        return final
     end
 
     local params = parse_range_params(COPY_OPTIONS, min, max, ...)
@@ -1447,15 +1505,7 @@ function Timeseries.copy(key, dest, min, max, ...)
 
     if (params.aggregate ~= nil) then
         -- if we're aggregating, the user should select a label
-        if (params.labels) then
-            if (#params.labels > 1) then
-                error('Timeseries.copy: only 1 label should be selected for aggregation')
-                for k, _ in ipairs(params.labels) do
-                    label = k
-                    break
-                end
-            end
-        else
+        if (#params.aggregate.fields == 0) then
             params.label = { value = 1 }
         end
     end

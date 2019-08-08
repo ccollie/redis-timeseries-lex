@@ -134,10 +134,10 @@ describe('copy', () => {
       await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
 
       const expected = [[1488823000, 116], [1488823500, 500], [1488824000, 500], [1488824500, 384]];
-      const options = ['AGGREGATION', 'count', 500];
+      const options = ['AGGREGATION', 500, 'count', 'value'];
       await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
       const response = await getRange(client, DEST_KEY, '-', '+');
-      const actual = response.map(x => [x[0], x[1].value]);
+      const actual = response.map(x => [x[0], x[1].value_count]);
       expect(actual).toEqual(expected);
     });
 
@@ -241,6 +241,28 @@ describe('copy', () => {
 
     describe('storage', () => {
 
+      describe('timeseries', () => {
+
+        test('aggregation - stats', async () => {
+          const start_ts = 1488823384;
+          const samples_count = 1500;
+
+          await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
+
+          const options = ['AGGREGATION', 500, 'stats', 'value', 'STORAGE', 'timeseries'];
+
+          await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
+          const actual = await getRange(client, DEST_KEY, '-', '+');
+          actual.forEach(([id, stats])  => {
+            expect(stats).toHaveProperty('value_stats_count');
+            expect(stats).toHaveProperty('value_stats_min');
+            expect(stats).toHaveProperty('value_stats_max');
+            expect(stats).toHaveProperty('value_stats_std');
+          });
+        })
+
+      })
+
       describe('hash', () => {
 
         test('non-aggregation', async () => {
@@ -290,17 +312,40 @@ describe('copy', () => {
           await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
 
           const expected = {
-            1488823000: "116",
-            1488823500: "500",
-            1488824000: "500",
-            1488824500: "384"
+            1488823000: {value_count: 116},
+            1488823500: {value_count: 500},
+            1488824000: {value_count: 500},
+            1488824500: {value_count: 384}
           };
 
-          const options = ['AGGREGATION', 'count', 500, 'STORAGE', 'hash'];
+          const options = ['AGGREGATION', 500, 'count', 'value', 'STORAGE', 'hash'];
 
           await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
           const actual = await getHash(DEST_KEY);
+          Object.keys(actual).forEach(k => {
+            actual[k] = JSON.parse(actual[k]);
+          });
           expect(actual).toEqual(expected);
+        })
+
+        test('aggregation - stats', async () => {
+          const start_ts = 1488823384;
+          const samples_count = 1500;
+
+          await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
+
+          const options = ['AGGREGATION', 500, 'stats', 'value', 'STORAGE', 'hash'];
+
+          await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
+          const actual = await getHash(DEST_KEY);
+          Object.keys(actual).forEach(k => {
+            actual[k] = JSON.parse(actual[k]);
+            const stats = actual[k];
+            expect(stats).toHaveProperty('value_stats_count');
+            expect(stats).toHaveProperty('value_stats_min');
+            expect(stats).toHaveProperty('value_stats_max');
+            expect(stats).toHaveProperty('value_stats_std');
+          });
         })
 
       });

@@ -85,9 +85,9 @@ The command returns the key-value data associated with a timestamp.  The returne
 Examples
 
 <pre><code>
-127.0.0.1:6379&gt; evalsha b91594bd37521 1 purchases add 1564632000000 item_id cat-987H1 cust_id 9A12YK2 amount 2500
+redis-cli&gt; evalsha b91594bd37521 1 purchases add 1564632000000 item_id cat-987H1 cust_id 9A12YK2 amount 2500
 1564632000000
-127.0.0.1:6379&gt; evalsha b91594bd37521 1 purchases get 1564632000000
+redis-cli&gt; evalsha b91594bd37521 1 purchases get 1564632000000
 1564632002100
 1) "item_id"
 2) "cat-987H1"
@@ -101,15 +101,15 @@ The [LABELS](#labels-a-nameoption-labelsa) and [REDACT](#redact-a-nameoption-red
 to specify which fields are returned
 
 <pre><code>
-127.0.0.1:6379&gt; evalsha b91594bd37521 1 purchases add 1564632000000 item_id cat-987H1 cust_id 9A12YK2 amount 2500
+redis-cli&gt; evalsha b91594bd37521 1 purchases add 1564632000000 item_id cat-987H1 cust_id 9A12YK2 amount 2500
 1564632000000
-127.0.0.1:6379&gt; evalsha b91594bd37521 1 purchases get 1564632000000 LABELS item_id amount
+redis-cli&gt; evalsha b91594bd37521 1 purchases get 1564632000000 LABELS item_id amount
 1564632002100
 1) "item_id"
 2) "cat-987H1"
 5) "amount"
 6) "2500"
-127.0.0.1:6379&gt; evalsha b91594bd37521 1 purchases get 1564632000000 REDACT cust_id
+redis-cli&gt; evalsha b91594bd37521 1 purchases get 1564632000000 REDACT cust_id
 1564632002100
 1) "item_id"
 2) "cat-987H1"
@@ -298,11 +298,12 @@ evalsha b91594bd37521... 1 game_scores range - + FILTER tag=playoffs value>10
 A timeseries range can be rolled up into buckets and aggregated by means of the AGGREGATION option :
 
  ```
- evalsha sha 1 key range_command min max AGGREGATION aggregationType timebucket
+ evalsha sha 1 key range_command min max AGGREGATION timebucket aggegation field [ aggregation field ... ]
  ```
 
-- `aggregationType` - *avg, sum, min, max, range, count, first, last, stats, distinct, count_distinct*
 - `timeBucket` - time bucket for aggregation. The units here should be the same as used when adding data.
+- `aggregation` - *avg, sum, min, max, range, count, first, last, stats, distinct, count_distinct*
+- `field` - the field to aggregate
 
 | Aggregation    | Description                                   |
 |:---------------|:----------------------------------------------|
@@ -320,7 +321,7 @@ A timeseries range can be rolled up into buckets and aggregated by means of the 
 Example
 
 ```
-evalsha b91594bd37521...  1 temperature:3:32 range 1548149180000 1548149210000 AGGREGATION avg 5000
+evalsha b91594bd37521...  1 temperature:3:32 range 1548149180000 1548149210000 AGGREGATION 5000 avg value
 ```
 
 For `range` and `revrange`, each key will be aggregated as appropriate, subject to any supplied `LABELS`.
@@ -359,7 +360,7 @@ evalsha b91594bd37521... 1 purchases range - + FILTER amount>=5000 FORMAT json
 Executes a `range` and copies the result to another key.
 
 ```bash
-evalsha sha 2 src dest min max [FILTER condition ....] [AGGREGATION aggKey timeBucket] [LABELS label ....] [REDACT field ...] [STORAGE ["timeseries"|"hash"]]
+evalsha sha 2 src dest min max [FILTER condition ....] [AGGREGATION timeBucket aggregate field aggregate field ...] [LABELS label ....] [REDACT field ...] [STORAGE ["timeseries"|"hash"]]
 ```
 
 - `key` the timeseries redis key
