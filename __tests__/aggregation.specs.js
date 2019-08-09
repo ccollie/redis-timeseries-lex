@@ -295,4 +295,83 @@ describe('aggregation', () => {
 
   });
 
+  describe('format', () => {
+
+      async function runAggregation(aggregation, format) {
+        await insertAggregationData();
+        const args = ['AGGREGATION', 10,  aggregation, 'value', 'FORMAT', format];
+        return getRange(client, TIMESERIES_KEY, '-', '+', ...args);
+      }
+
+      describe('json', () => {
+
+        it('distinct returns an array', async () => {
+          const start_ts = 1488823384;
+          const samples_count = 50;
+
+          const data = [];
+          const jobs = ['preparation', 'execution', 'cleanup'];
+
+          for (let ts = start_ts, i = 0; i < samples_count; i++, ts++) {
+            const job = jobs[i % jobs.length];
+            data.push({
+              ts,
+              id: i,
+              job
+            })
+          }
+          await insertData(client, TIMESERIES_KEY, start_ts, samples_count, data);
+
+          const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'distinct', 'job', 'FORMAT', 'json');
+
+          // for now, just make sure we have objects returned with the proper shape
+          const actual = response.map(x => {
+            const data = x[1].job.distinct;
+            expect(Array.isArray(data)).toEqual(true);
+          });
+
+        });
+
+        it('count_distinct returns an object', async () => {
+          const start_ts = 1488823384;
+          const samples_count = 50;
+
+          const data = [];
+
+          const states = ['ready', 'active', 'waiting', 'complete'];
+
+          for (let ts = start_ts, i = 0; i < samples_count; i++, ts++) {
+            const state = states[i % states.length];
+            data.push({
+              id: i,
+              state
+            })
+          }
+          await insertData(client, TIMESERIES_KEY, start_ts, samples_count, data);
+
+          const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'count_distinct', 'state', 'FORMAT', 'json');
+          // convert strings to floats in server response
+          const actual = response.map(([ts, data]) => {
+            expect(typeof data.state.count_distinct).toEqual('object');
+          });
+
+        });
+
+        it('stats is returned properly', async() => {
+          const response = await runAggregation('stats', 'json');
+          response.forEach(x => {
+            const data = x[1];
+            expect(data).toHaveProperty('value');
+            const value = data.value;
+            expect(value).toHaveProperty('stats');
+            const stats = value.stats;
+            expect(stats).toHaveProperty('std');
+            expect(stats).toHaveProperty('mean');
+          });
+        });
+
+      });
+
+  });
+
 });

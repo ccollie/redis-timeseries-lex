@@ -38,7 +38,7 @@ describe('format', () => {
     boolVal: true,
     intVal: 12345,
     stringVal: "bazinga",
-    floatVal: 123.456
+    floatVal: "123.456"
   };
 
   test('normal response' , async () => {

@@ -131,14 +131,12 @@ local function is_possibly_number(val)
 end
 
 local function parse_input(val)
-    local is_num
-    is_num, val = is_possibly_number(val)
-
+    local is_num, num = is_possibly_number(val)
     if (is_num) then
-        return val
-    end
-    if (val == 'nil') or (val == 'null') then
-        return nil
+        if (math.floor(num) ~= num) then
+            return val
+        end
+        return num
     end
     if (val == 'true') then
         return true
@@ -146,10 +144,6 @@ local function parse_input(val)
         return false
     end
     return val
-end
-
-local function is_float(val)
-    return type(val) == 'number' and (math.floor(val) ~= val)
 end
 
 local function possibly_convert_float(val)
@@ -212,6 +206,15 @@ local function from_hash(table)
     return data
 end
 
+local function table_keys(table)
+    local i, data = 1, {}
+    for k, _ in pairs(table) do
+        data[i] = k
+        i = i + 1
+    end
+    return data
+end
+
 -- value is raw value from zrangebylex
 -- only call this if (options.labels or options.redacted)
 local function pick(value, options)
@@ -240,28 +243,17 @@ end
 local function split(source, sep)
     local start, ending = string.find(source, sep or SEPARATOR, 1, true)
     local timestamp = source:sub(1, start - 1)
-    local flag = source:sub(start + 1, start + 1)
-    local value = source:sub(ending + 2)
-    return tonumber(timestamp), value, flag
+    local value = source:sub(ending + 1)
+    return tonumber(timestamp), value
 end
 
 local function encode_value(ts, data)
-    local is_float = is_float
-    local block = cmsgpack.pack(data)
-    local has_float = false
-    for i = 1, #data, 2 do
-        if (is_float(data[i + 1])) then
-            has_float = true
-            break
-        end
-    end
-    local flag = (has_float and 'f') or 'n'
-    return tostring(ts) .. SEPARATOR .. flag .. block
+    return tostring(ts) .. SEPARATOR .. cmsgpack.pack(data)
 end
 
 local function decode_value(raw_value)
-    local ts, block, flag = split(raw_value)
-    return ts, cmsgpack.unpack(block), flag
+    local ts, block = split(raw_value)
+    return ts, cmsgpack.unpack(block)
 end
 
 local function store_value(key, timestamp, value, is_hash)
@@ -822,9 +814,8 @@ local function process_range(range, options)
     local filter = options.filter
 
     local i = 1
-    local needs_encoding = false
     for _, value in ipairs(range) do
-        local ts, val, flag = decode(value)
+        local ts, val = decode(value)
         valid = true
         if filter then
             hash = to_hash(val)
@@ -837,11 +828,10 @@ local function process_range(range, options)
             if #val then
                 result[i] = { ts, val }
                 i = i + 1
-                needs_encoding = needs_encoding or (flag == 'f')
             end
         end
     end
-    return result, needs_encoding
+    return result
 end
 
 local function get_single_value(key, timestamp, options, name)
@@ -852,13 +842,12 @@ local function get_single_value(key, timestamp, options, name)
     local ra = redis.call('zrangebylex', key, min, max, 'limit', 0, 2)
     if ra ~= nil and #ra == 1 then
         local raw_value = ra[1]
-        local ts, value, flag = decode_value(raw_value)
+        local ts, value = decode_value(raw_value)
         value = ((options.labels or options.redacted) and pick(value, options)) or value
         return {
             ts = ts,
             value = value,
-            raw_value = raw_value,
-            needs_encoding = (flag == 'f')
+            raw_value = raw_value
         }
     elseif #ra > 1 then
         error('Critical error in timeseries.' .. name .. ' : multiple values for a timestamp')
@@ -1158,9 +1147,7 @@ function Timeseries._get(remove, key, timestamp, ...)
             redis.call("zrem", key, entry.raw_value)
         end
         if (params.format == nil) then
-            if (entry.needs_encoding) then
-                return to_bulk_reply(result)
-            end
+            -- to_bulk_reply
             return result
         end
         return format_result(to_hash(result), params.format)
@@ -1316,16 +1303,26 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
 
             local buckets = aggregate(by_key[ key ], agg_type, agg_params.timeBucket)
             for _, val in pairs(buckets) do
+                local value = val[2]
                 k = tostring(val[1])
                 result[k] = result[k] or {}
                 result[k][key] = result[k][key] or {}
 
                 local temp = result[k][key]
                 if (format == 'json') or (format == 'msgpack') then
-                    temp[agg_type] = val[2]
+                    if (agg_type == 'distinct') then
+                        local data = {}
+                        for m = 1, #value, 2 do
+                            data[#data + 1] = value[m]
+                        end
+                        value = data
+                    elseif (agg_type == 'stats') then
+                        value = to_hash(value)
+                    end
+                    temp[agg_type] = value
                 else
                     temp[#temp + 1] = agg_type
-                    temp[#temp + 1] = val[2]
+                    temp[#temp + 1] = value
                 end
                 if not has_timestamps then
                     bucket_list[#bucket_list + 1] = { val[1], k }
@@ -1356,7 +1353,7 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
     local data = base_range(cmd, key, params)
     local format = params.format
     if data and #data > 0 then
-        local range, needs_encoding = process_range(data, params)
+        local range = process_range(data, params)
         if params.aggregate ~= nil then
             range = handle_aggregation(range, params.aggregate, format)
         else
@@ -1366,8 +1363,6 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
                     final[i] = {value[1], to_hash(value[2])}
                 end
                 range = format_result(final, format)
-            elseif needs_encoding then
-                range = to_bulk_reply(range)
             end
         end
 
@@ -1435,7 +1430,7 @@ end
 --- copy data from a timeseries and store it in another key
 function Timeseries.copy(key, dest, min, max, ...)
 
-    local function handle_aggregation(range, agg_params)
+    local function handle_aggregation(range, agg_params, storage)
         local aggregate = aggregate
         local by_key = {}
         for _, v in ipairs(range) do
@@ -1450,6 +1445,7 @@ function Timeseries.copy(key, dest, min, max, ...)
         local result = {}
         local bucket_list = {}
         local has_timestamps = false
+        local sep = '_'
 
         for _, field_info in ipairs(agg_params.fields) do
             local key = field_info[1]
@@ -1461,11 +1457,11 @@ function Timeseries.copy(key, dest, min, max, ...)
                 local k = tostring(val[1])
                 result[k] = result[k] or {}
 
-                local slot_key = key .. '_' .. agg_type
+                local slot_key = key .. sep .. agg_type
                 local temp = result[k]
                 if (type(value) == 'table') then
                     for j = 1, #value, 2 do
-                        temp[#temp + 1] = slot_key .. '_' .. value[j]
+                        temp[#temp + 1] = slot_key .. sep .. value[j]
                         temp[#temp + 1] = value[j + 1]
                     end
                 else
@@ -1512,7 +1508,7 @@ function Timeseries.copy(key, dest, min, max, ...)
 
     local range = process_range(data, params)
     if params.aggregate ~= nil then
-        range = handle_aggregation(range, params.aggregate)
+        range = handle_aggregation(range, params.aggregate, storage)
     end
 
     if (#range) then

@@ -140,9 +140,28 @@ function parseMessageResponse(reply) {
   });
 }
 
+function getFormat(args) {
+  let i = 0;
+  for (i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (typeof arg === 'string' && (arg.toUpperCase() === 'FORMAT')) {
+      if (i + 1 < args.length) {
+        return args[i+1];
+      }
+    }
+  }
+  return null;
+}
+
 async function getRangeEx(client, cmd, key, min, max, ...args) {
   const isAggregation = args.find(x => typeof(x) === 'string' && x.toUpperCase() === 'AGGREGATION');
   const response = await client.timeseries(key, cmd, min, max, ...args);
+  const format = getFormat(args);
+  if (typeof response === 'string') {
+    const format = getFormat(args);
+    if (format === 'json')
+      return JSON.parse(response);
+  }
   if (isAggregation) {
     return parseAggregationResponse(response);
   }
