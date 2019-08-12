@@ -17,7 +17,7 @@
 local _NAME = 'timeseries-lex.lua'
 local _VERSION = '0.0.1'
 local _DESCRIPTION = 'A library for simple timeseries handling in Redis'
-local _COPYRIGHT = '2019 Clayton Collie, Guanima Tech Labs'
+local _COPYRIGHT = '2019 Clayton Collie, Guanima Tech'
 
 local function ts_debug(msg)
     redis.call('rpush', 'ts-debug', msg)
@@ -409,26 +409,32 @@ end
 --- the corresponding filter predicate
 local function parse_filter_condition(exp)
 
-    local function transform_nil(val)
-        -- special handling for null
-        if (val == 'nil') or (val == 'null') then
-            return nil
-        end
-        return val
-    end
-
     local function compare(_field, _op, _val)
+        local num = tonumber(_val)
+        local is_numeric = num ~= nil
+        if (is_numeric) then
+            _val = num
+        else
+            _val = parse_input(_val)
+        end
+        local val_type = type(_val)
         return function(v)
+            local val_type = val_type
             local val = _val
+            local is_numeric = is_numeric
             local op = _op
             local field = _field
-            local possibly_number = is_possibly_number
 
-            -- if a value looks like a number, we'll treat it like one. We're a timeseries after all
-            local is_numeric, to_compare = possibly_number(v[field])
+            local to_compare = v[field]
 
-            if (is_numeric) then
-                val = tonumber(val)
+            if (val_type ~= type(to_compare)) then
+                if is_numeric then
+                    to_compare = tonumber(to_compare)
+                else
+                    -- convert all to string
+                    val = tostring(val)
+                    to_compare = tostring(to_compare)
+                end
             end
             -- ts_debug('filtering. v = ' .. table.tostring(v) .. ' field = ' .. field .. ', comp = ' .. tostring(to_compare) .. ' ' .. op .. ' ' .. tostring(val))
             if (op == 'eq') then
@@ -507,9 +513,6 @@ local function parse_filter_condition(exp)
             pattern = ID_CAPTURE_PATTERN .. op .. '(.+)'
             _, _, field, val = string.find(cond, pattern)
             if (field and val) then
-                if (op == '=') or (op == '!=') then
-                    val = transform_nil(val)
-                end
                 return compare(field, op_names[i], val)
             end
         end
@@ -517,12 +520,7 @@ local function parse_filter_condition(exp)
         return nil
     end
 
-    local p = match_contains(exp)
-    if (p == nil) then
-        p = match_ops(exp)
-    end
-
-    assert(p, 'FILTER: unable to parse expression : ' .. exp)
+    local p = assert(match_contains(exp) or match_ops(exp), 'FILTER: unable to parse expression : ' .. exp)
 
     return p
 end
@@ -1180,8 +1178,7 @@ function Timeseries.set(key, timestamp, ...)
     local count = 0
     local parse = parse_input
     for i = 1, #values, 2 do
-        local name = values[i]
-        hash[name] = parse(values[i + 1])
+        hash[values[i]] = parse(values[i + 1])
         count = count + 1
     end
 
