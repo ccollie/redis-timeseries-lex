@@ -81,4 +81,8 @@ describe('set', () => {
 
   });
 
+  it('should disallow non-numeric timestamps', async () => {
+    await set('not-a-number', "value", 10)
+        .catch(e => expect(e.message).toMatch(/timestamp must be a number/));
+  });
 });

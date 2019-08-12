@@ -87,4 +87,9 @@ describe('add', () => {
         .catch(e => expect(e.message).toMatch(/Number of arguments must be even/));
   });
 
+  it('should disallow non-numeric timestamps', async () => {
+    await callMethod('add', 'not-a-number', "value", 10)
+        .catch(e => expect(e.message).toMatch(/timestamp should be a number/));
+  });
+
 });

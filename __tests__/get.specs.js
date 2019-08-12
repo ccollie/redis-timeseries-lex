@@ -52,6 +52,11 @@ describe('get', () => {
     expect(value).toEqual(['value', 200]);
   });
 
+  it('should disallow non-numeric timestamps', async () => {
+    await getValue( 'not-a-number')
+        .catch(e => expect(e.message).toMatch(/number expected/));
+  });
+  
   it('should return all values if no keys are specified', async () => {
     const states = {
       active: 1,

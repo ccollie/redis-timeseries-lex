@@ -1033,7 +1033,7 @@ local function parse_timestamp(ts)
         local val = redis.call('TIME')
         return val[1]
     end
-    return ts
+    return tonumber(ts)
 end
 
 -- Add timestamp-value pairs to the Timeseries
