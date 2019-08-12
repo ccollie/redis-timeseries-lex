@@ -998,7 +998,6 @@ local AGGR_FINALIZE_FUNCS = {
 local function aggregate(range, aggregationType, timeBucket)
     local result = {}
     local ts, key, val
-    local bucket_list = {}
 
     local iterate = assert(AGGR_ITERATION_FUNCS[aggregationType], 'invalid aggregate type "' .. tostring(aggregationType) .. '"')
     local finalize = AGGR_FINALIZE_FUNCS[aggregationType] or AGGR_FINALIZE_FUNCS.default
@@ -1007,21 +1006,10 @@ local function aggregate(range, aggregationType, timeBucket)
         ts = kv[1] - (kv[1] % timeBucket)
         val = kv[2]
         key = tostring(ts)
-        if (result[key] == nil) then
-            -- first time this bucket appears
-            bucket_list[#bucket_list + 1] = { ts, key }
-        end
         iterate(result, key, val)
     end
 
-    result = finalize(result, timeBucket)
-
-    -- use bucket_list to transform hash into properly ordered indexed array
-    local final = {}
-    for i, ts in ipairs(bucket_list) do
-        final[i] = { ts[1], result[ts[2]] }
-    end
-    return final
+    return finalize(result, timeBucket)
 end
 
 local function base_range(cmd, key, params)
@@ -1292,43 +1280,46 @@ function Timeseries._range(remove, cmd, key, min, max, ...)
         end
         local result = {}
         local bucket_list = {}
-        local has_timestamps = false
+        local bucket_hash = {}
 
         for _, field_info in ipairs(agg_params.fields) do
             local key = field_info[1]
             local agg_type = field_info[2]
+            local values = by_key[key]
 
-            local buckets = aggregate(by_key[ key ], agg_type, agg_params.timeBucket)
-            for _, val in pairs(buckets) do
-                local value = val[2]
-                k = tostring(val[1])
-                result[k] = result[k] or {}
-                result[k][key] = result[k][key] or {}
+            if (values and #values > 0) then
+                local buckets = aggregate(values, agg_type, agg_params.timeBucket)
+                for k, value in pairs(buckets) do
+                    result[k] = result[k] or {}
+                    result[k][key] = result[k][key] or {}
 
-                local temp = result[k][key]
-                if (format == 'json') or (format == 'msgpack') then
-                    if (agg_type == 'distinct') then
-                        local data = {}
-                        for m = 1, #value, 2 do
-                            data[#data + 1] = value[m]
+                    local temp = result[k][key]
+                    if (format == 'json') or (format == 'msgpack') then
+                        if (agg_type == 'distinct') then
+                            local data = {}
+                            for m = 1, #value, 2 do
+                                data[#data + 1] = value[m]
+                            end
+                            value = data
+                        elseif (agg_type == 'stats') then
+                            value = to_hash(value)
                         end
-                        value = data
-                    elseif (agg_type == 'stats') then
-                        value = to_hash(value)
+                        temp[agg_type] = value
+                    else
+                        temp[#temp + 1] = agg_type
+                        temp[#temp + 1] = value
                     end
-                    temp[agg_type] = value
-                else
-                    temp[#temp + 1] = agg_type
-                    temp[#temp + 1] = value
-                end
-                if not has_timestamps then
-                    bucket_list[#bucket_list + 1] = { val[1], k }
+                    if (bucket_hash[k] == nil) then
+                        bucket_hash[k] = 1
+                        bucket_list[#bucket_list + 1] = { tonumber(k), k }
+                    end
                 end
             end
-            has_timestamps = true
         end
 
         -- use bucket_list to transform hash into properly ordered indexed array
+        table.sort(bucket_list, function(a, b) return a[1] < b[1] end)
+
         local final = {}
         if (format == 'json') or (format == 'msgpack') then
             for i, ts in ipairs(bucket_list) do
@@ -1440,39 +1431,41 @@ function Timeseries.copy(key, dest, min, max, ...)
             end
         end
         local result = {}
+        local bucket_hash = {}
         local bucket_list = {}
-        local has_timestamps = false
         local sep = '_'
 
         for _, field_info in ipairs(agg_params.fields) do
             local key = field_info[1]
             local agg_type = field_info[2]
+            local values = by_key[ key ]
 
-            local buckets = aggregate(by_key[ key ], agg_type, agg_params.timeBucket)
-            for _, val in pairs(buckets) do
-                local value = val[2]
-                local k = tostring(val[1])
-                result[k] = result[k] or {}
+            if (values and #values > 0) then
+                local buckets = aggregate(values, agg_type, agg_params.timeBucket)
+                for k, value in pairs(buckets) do
+                    result[k] = result[k] or {}
 
-                local slot_key = key .. sep .. agg_type
-                local temp = result[k]
-                if (type(value) == 'table') then
-                    for j = 1, #value, 2 do
-                        temp[#temp + 1] = slot_key .. sep .. value[j]
-                        temp[#temp + 1] = value[j + 1]
+                    local slot_key = key .. sep .. agg_type
+                    local temp = result[k]
+                    if (type(value) == 'table') then
+                        for j = 1, #value, 2 do
+                            temp[#temp + 1] = slot_key .. sep .. value[j]
+                            temp[#temp + 1] = value[j + 1]
+                        end
+                    else
+                        temp[#temp + 1] = slot_key
+                        temp[#temp + 1] = value
                     end
-                else
-                    temp[#temp + 1] = slot_key
-                    temp[#temp + 1] = value
-                end
-                if not has_timestamps then
-                    bucket_list[#bucket_list + 1] = { val[1], k }
+                    if (bucket_hash[k] == nil) then
+                        bucket_hash[k] = 1
+                        bucket_list[#bucket_list + 1] = { tonumber(k), k }
+                    end
                 end
             end
-            has_timestamps = true
         end
 
         -- use bucket_list to transform hash into properly ordered indexed array
+        table.sort(bucket_list, function(a, b) return a[1] < b[1] end)
         local final = {}
         for i, ts in ipairs(bucket_list) do
             final[i] = { ts[1], result[ts[2]] }
