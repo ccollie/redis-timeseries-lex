@@ -1050,6 +1050,23 @@ function Timeseries.add(key, timestamp, ...)
     return timestamp
 end
 
+
+function Timeseries.bulkAdd(key, ...)
+    local values = get_key_val_varargs('bulkAdd', ...)
+    local len = #values
+    local count = 0
+
+    for i = 1, len, 2 do
+        local ts = assert(parse_timestamp(values[i]), 'timestamp should be a number');
+        -- should be a json encoded string
+        local val = cjson.decode(values[i + 1])
+        store_value(key, ts, val, true)
+        count = count + 1
+    end
+
+    return count
+end
+
 function Timeseries.del(key, ...)
     local args = { ... }
     assert(#args > 0, "At least one item must be specified for del")
