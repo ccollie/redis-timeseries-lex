@@ -181,6 +181,34 @@ describe('aggregation', () => {
     expect(actual).toEqual(expected);
   });
 
+  test('std deviation', async () => {
+    const raw_data = await insertAggregationData(TIMESERIES_KEY);
+    const filtered = raw_data.filter(([id, val]) => id >= 10 && id <= 50);
+
+    const buckets = {};
+    const bucketIds = new Set();
+    filtered.forEach(([id, val]) => {
+      let round = (id - (id % 10));
+      bucketIds.add(round);
+      buckets[round] = buckets[round] || [];
+      buckets[round].push(val);
+    });
+    bucketIds.forEach(id => {
+      buckets[id] = round(calc_stats(buckets[id]).std, 5);
+    });
+
+    const expected = Array.from(bucketIds).sort().map(ts => [ts, buckets[ts]]);
+
+    const response = await getRange(client, TIMESERIES_KEY, 10, 50, 'AGGREGATION', 10, 'stdev', 'value');
+    // convert strings to floats in server response
+    const actual = response.map(([ts, data]) => {
+      const value = round(parseFloat(data.value.stdev), 5);
+      return [ts, value];
+    });
+    
+    expect(actual).toEqual(expected);
+  });
+
   test('distinct', async () => {
     const start_ts = 1488823384;
     const samples_count = 50;

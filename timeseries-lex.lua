@@ -114,6 +114,26 @@ function stats.basic(t)
     }
 end
 
+function stats.stdDeviation(t)
+    local count, sum = 0, 0
+    local vk, mean = 0, 0
+    local std = 0
+    local sqrt = math.sqrt
+
+    for _, v in pairs(t) do
+        local val = tonumber(v)
+        if val ~= nil then
+            local oldmean = mean
+            count = count + 1
+            sum = sum + val
+            mean = sum / count
+            vk = vk + (val - mean) * (val - oldmean)
+            std = sqrt(vk / (count - 1))
+        end
+    end
+    return std
+end
+
 -- Get the median of a table.
 function stats.median( t )
     local temp={}
@@ -553,6 +573,7 @@ local AGGREGATION_TYPES = {
     sum = 1,
     avg = 1,
     median = 1,
+    stdev = 1,
     min = 1,
     max = 1,
     first = 1,
@@ -899,6 +920,13 @@ local AGGR_ITERATION_FUNCS = {
             table.insert(result[key], val)
         end
     end,
+    stdev = function(result, key, val)
+        val = tonumber(val)
+        if val ~= nil then
+            result[key] = result[key] or {}
+            table.insert(result[key], val)
+        end
+    end,
     stats = function(result, key, val)
         val = tonumber(val)
         if val ~= nil then
@@ -993,6 +1021,12 @@ local AGGR_FINALIZE_FUNCS = {
     median = function(result)
         for bucket, data in pairs(result) do
             result[bucket] = possibly_convert_float( stats.median(data) )
+        end
+        return result
+    end,
+    stdev = function(result)
+        for bucket, data in pairs(result) do
+            result[bucket] = possibly_convert_float( stats.stdDeviation(data) )
         end
         return result
     end,
