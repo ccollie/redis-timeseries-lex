@@ -900,6 +900,14 @@ local function get_single_value(key, timestamp, options, name)
     return nil
 end
 
+local function agg_collect_numbers(result, key, val)
+    val = tonumber(val)
+    if val ~= nil then
+        result[key] = result[key] or {}
+        table.insert(result[key], val)
+    end
+end
+
 local AGGR_ITERATION_FUNCS = {
     count = function(result, key, val)
         result[key] = tonumber(result[key] or 0) + 1
@@ -908,34 +916,10 @@ local AGGR_ITERATION_FUNCS = {
         val = tonumber(val) or 0
         result[key] = tonumber(result[key] or 0) + val
     end,
-    avg = function(result, key, val)
-        val = tonumber(val)
-        if val ~= nil then
-            result[key] = result[key] or {}
-            table.insert(result[key], val)
-        end
-    end,
-    median = function(result, key, val)
-        val = tonumber(val)
-        if val ~= nil then
-            result[key] = result[key] or {}
-            table.insert(result[key], val)
-        end
-    end,
-    stdev = function(result, key, val)
-        val = tonumber(val)
-        if val ~= nil then
-            result[key] = result[key] or {}
-            table.insert(result[key], val)
-        end
-    end,
-    stats = function(result, key, val)
-        val = tonumber(val)
-        if val ~= nil then
-            result[key] = result[key] or {}
-            table.insert(result[key], val)
-        end
-    end,
+    avg = agg_collect_numbers,
+    median = agg_collect_numbers,
+    stdev = agg_collect_numbers,
+    stats = agg_collect_numbers,
     rate = function(result, key, val)
         result[key] = tonumber(result[key] or 0) + 1
     end,
