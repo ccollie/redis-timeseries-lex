@@ -109,12 +109,15 @@ describe('aggregation', () => {
     await testAggregation('avg', expected);
   });
 
+  test('median', async () => {
+    const expected = [[10, 155.5], [20, 255.5], [30, 355.5], [40, 455.5]];
+    await testAggregation('median', expected);
+  });
 
   test('sum', async () => {
     const expected = [[10, 1565], [20, 2565], [30, 3565], [40, 4565]];
     await testAggregation('sum', expected);
   });
-
 
   test('count', async () => {
     const expected = [[10, 10], [20, 10], [30, 10], [40, 10]];

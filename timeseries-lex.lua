@@ -114,6 +114,29 @@ function stats.basic(t)
     }
 end
 
+-- Get the median of a table.
+function stats.median( t )
+    local temp={}
+
+    -- deep copy table so that when we sort it, the original is unchanged
+    -- also weed out any non numbers
+    for k,v in pairs(t) do
+        if type(v) == 'number' then
+            table.insert( temp, v )
+        end
+    end
+
+    table.sort( temp )
+
+    -- If we have an even number of table elements or odd.
+    if math.fmod(#temp,2) == 0 then
+        -- return mean value of middle two elements
+        return ( temp[#temp/2] + temp[(#temp/2)+1] ) / 2
+    else
+        -- return middle element
+        return temp[math.ceil(#temp/2)]
+    end
+end
 
 --- UTILS ------
 
@@ -529,6 +552,7 @@ local AGGREGATION_TYPES = {
     count = 1,
     sum = 1,
     avg = 1,
+    median = 1,
     min = 1,
     max = 1,
     first = 1,
@@ -868,6 +892,13 @@ local AGGR_ITERATION_FUNCS = {
             table.insert(result[key], val)
         end
     end,
+    median = function(result, key, val)
+        val = tonumber(val)
+        if val ~= nil then
+            result[key] = result[key] or {}
+            table.insert(result[key], val)
+        end
+    end,
     stats = function(result, key, val)
         val = tonumber(val)
         if val ~= nil then
@@ -956,6 +987,12 @@ local AGGR_FINALIZE_FUNCS = {
     avg = function(result)
         for bucket, data in pairs(result) do
             result[bucket] = possibly_convert_float( stats.mean(data) )
+        end
+        return result
+    end,
+    median = function(result)
+        for bucket, data in pairs(result) do
+            result[bucket] = possibly_convert_float( stats.median(data) )
         end
         return result
     end,
