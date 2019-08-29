@@ -163,6 +163,7 @@ end
 local SEPARATOR = '|'
 local IDENTIFIER_PATTERN = "[%a_]+[%a%d_]*"
 local ID_CAPTURE_PATTERN = '(' .. IDENTIFIER_PATTERN .. ')'
+local ROLLUP_PATTERN = ID_CAPTURE_PATTERN .. '%s*%(%s*' .. ID_CAPTURE_PATTERN.. '%s*%)'
 
 local function is_possibly_number(val)
     local res = tonumber(val)
@@ -719,6 +720,8 @@ end
 
 local function parse_range_params(valid_options, min, max, ...)
     local PARAMETER_OPTIONS = PARAMETER_OPTIONS
+    local ROLLUP_PATTERN = ROLLUP_PATTERN
+    local AGGREGATION_TYPES = AGGREGATION_TYPES
     local fetch_params = {}
     parse_range_min_max(fetch_params, min, max)
 
@@ -778,17 +781,16 @@ local function parse_range_params(valid_options, min, max, ...)
                 fields = {}
             }
             i = i + 1
-            local agg, field
             while i <= #arg do
-                agg = arg[i]
+                local agg = arg[i]
                 if (ALL_OPTIONS[string.upper(agg)]) then
                     break
                 end
-                agg = assert(string.lower(agg), 'missing value for aggregate type')
-                assert(AGGREGATION_TYPES[agg], 'invalid aggregation type : "' .. agg ..'"')
-                i = i + 1
-                field = assert(arg[i], 'missing field in aggregate')
-                table.insert(result.aggregate.fields, { field, agg })
+                local rollup, field = string.match(agg, ROLLUP_PATTERN)
+                assert(field, 'invalid or missing aggregate spec ' .. '"' .. (agg or '') .. '"')
+                rollup = assert(string.lower(rollup), 'missing value for aggregate type')
+                assert(AGGREGATION_TYPES[rollup], 'invalid aggregation type : "' .. rollup ..'"')
+                table.insert(result.aggregate.fields, { field, rollup })
                 result.labels[field] = 1
                 i = i + 1
             end

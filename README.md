@@ -50,7 +50,7 @@ evalsha sha 1 key command [args1 ...]
 For example
 
 ```bash
-evalsha b91594bd37521... 1 wait-time:5s range 1548149180000 1548149280000 AGGREGATION max 5000 
+evalsha b91594bd37521... 1 wait-time:5s range 1548149180000 1548149280000 AGGREGATION 5000 max(duration) 
 ```
 
 
@@ -235,7 +235,7 @@ in reverse order of timestamp, but is otherwise to its non-reversed counterpart.
 but removes the data in the range before returning it.
 
 ```bash
-evalsha sha 1 key [range|revrange|poprange] min max [FILTER condition ....] [AGGREGATION aggKey timeBucket] [LABELS label ....] [REDACT field ...] [FORMAT [json|msgpack]]
+evalsha sha 1 key [range|revrange|poprange] min max [FILTER condition ....] [AGGREGATION timeBucket rollup(field) ...] [LABELS label ....] [REDACT field ...] [FORMAT [json|msgpack]]
 ```
 
 - `key` the timeseries redis key
@@ -298,7 +298,7 @@ evalsha b91594bd37521... 1 game_scores range - + FILTER tag=playoffs value>10
 A timeseries range can be rolled up into buckets and aggregated by means of the AGGREGATION option :
 
  ```
- evalsha sha 1 key range_command min max AGGREGATION timebucket aggegation field [ aggregation field ... ]
+ evalsha sha 1 key range_command min max AGGREGATION timebucket aggegation(field) [ aggregation(field) ... ]
  ```
 
 - `timeBucket` - time bucket for aggregation. The units here should be the same as used when adding data.
@@ -321,7 +321,7 @@ A timeseries range can be rolled up into buckets and aggregated by means of the 
 Example
 
 ```
-evalsha b91594bd37521...  1 temperature:3:32 range 1548149180000 1548149210000 AGGREGATION 5000 avg value
+evalsha b91594bd37521...  1 temperature:3:32 range 1548149180000 1548149210000 AGGREGATION 5000 avg(value)
 ```
 
 For `range` and `revrange`, each key will be aggregated as appropriate, subject to any supplied `LABELS`.
@@ -360,7 +360,7 @@ evalsha b91594bd37521... 1 purchases range - + FILTER amount>=5000 FORMAT json
 Executes a `range` and copies the result to another key.
 
 ```bash
-evalsha sha 2 src dest min max [FILTER condition ....] [AGGREGATION timeBucket aggregate field aggregate field ...] [LABELS label ....] [REDACT field ...] [STORAGE ["timeseries"|"hash"]]
+evalsha sha 2 src dest min max [FILTER condition ....] [AGGREGATION timeBucket aggregate(field) aggregate(field) ...] [LABELS label ....] [REDACT field ...] [STORAGE ["timeseries"|"hash"]]
 ```
 
 - `key` the timeseries redis key

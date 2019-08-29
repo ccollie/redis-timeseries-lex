@@ -134,7 +134,7 @@ describe('copy', () => {
       await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
 
       const expected = [[1488823000, 116], [1488823500, 500], [1488824000, 500], [1488824500, 384]];
-      const options = ['AGGREGATION', 500, 'count', 'value'];
+      const options = ['AGGREGATION', 500, 'count(value)'];
       await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
       const response = await getRange(client, DEST_KEY, '-', '+');
       const actual = response.map(x => [x[0], x[1].value_count]);
@@ -249,7 +249,7 @@ describe('copy', () => {
 
           await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
 
-          const options = ['AGGREGATION', 500, 'stats', 'value', 'STORAGE', 'timeseries'];
+          const options = ['AGGREGATION', 500, 'stats(value)', 'STORAGE', 'timeseries'];
 
           await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
           const actual = await getRange(client, DEST_KEY, '-', '+');
@@ -318,7 +318,7 @@ describe('copy', () => {
             1488824500: {value_count: 384}
           };
 
-          const options = ['AGGREGATION', 500, 'count', 'value', 'STORAGE', 'hash'];
+          const options = ['AGGREGATION', 500, 'count(value)', 'STORAGE', 'hash'];
 
           await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
           const actual = await getHash(DEST_KEY);
@@ -334,7 +334,7 @@ describe('copy', () => {
 
           await insertData(client, SOURCE_KEY, start_ts, samples_count, 5);
 
-          const options = ['AGGREGATION', 500, 'stats', 'value', 'STORAGE', 'hash'];
+          const options = ['AGGREGATION', 500, 'stats(value)', 'STORAGE', 'hash'];
 
           await copy(client, SOURCE_KEY, DEST_KEY, start_ts, start_ts + samples_count, ...options);
           const actual = await getHash(DEST_KEY);

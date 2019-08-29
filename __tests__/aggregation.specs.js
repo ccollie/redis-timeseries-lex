@@ -44,7 +44,7 @@ describe('aggregation', () => {
   }
 
   async function runAggregation(key, min, max, aggType) {
-    const response = await getRange(client, key, min, max, 'AGGREGATION', 10, aggType, 'value');
+    const response = await getRange(client, key, min, max, 'AGGREGATION', 10, `${aggType}(value)`);
     const actual = response.map( ([ts, data]) => {
       return [ts, parseFloat(data.value[aggType])]
     });
@@ -165,7 +165,7 @@ describe('aggregation', () => {
 
     const expected = Array.from(bucketIds).sort().map(ts => [ts, buckets[ts]]);
 
-    const response = await getRange(client, TIMESERIES_KEY, 10, 50, 'AGGREGATION', 10, 'stats', 'value');
+    const response = await getRange(client, TIMESERIES_KEY, 10, 50, 'AGGREGATION', 10, 'stats(value)');
     // convert strings to floats in server response
     const actual = response.map(([ts, data]) => {
       const value = data.value.stats;
@@ -199,13 +199,13 @@ describe('aggregation', () => {
 
     const expected = Array.from(bucketIds).sort().map(ts => [ts, buckets[ts]]);
 
-    const response = await getRange(client, TIMESERIES_KEY, 10, 50, 'AGGREGATION', 10, 'stdev', 'value');
+    const response = await getRange(client, TIMESERIES_KEY, 10, 50, 'AGGREGATION', 10, 'stdev(value)');
     // convert strings to floats in server response
     const actual = response.map(([ts, data]) => {
       const value = round(parseFloat(data.value.stdev), 5);
       return [ts, value];
     });
-    
+
     expect(actual).toEqual(expected);
   });
 
@@ -242,7 +242,7 @@ describe('aggregation', () => {
 
     const expected = Array.from(bucketIds).sort().map(ts => [ts, Object.keys(buckets[ts]).sort()]);
 
-    const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'distinct', 'job');
+    const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'distinct(job)');
 
     // for now, just make sure we have objects returned with the proper shape
     const actual = response.map(x => {
@@ -285,7 +285,7 @@ describe('aggregation', () => {
 
     const expected = Array.from(bucketIds).sort().map(ts => [ts, buckets[ts]]);
 
-    const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'count_distinct', 'state');
+    const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'count_distinct(state)');
     // convert strings to floats in server response
     const actual = response.map(([ts, data]) => {
       return [ts, data.state.count_distinct];
@@ -314,7 +314,7 @@ describe('aggregation', () => {
     }
     await insertData(client, TIMESERIES_KEY, start_ts, samples_count, data);
 
-    const args = ['AGGREGATION', 10, 'sum', 'num', 'sum', 'value'];
+    const args = ['AGGREGATION', 10, 'sum(num)', 'sum(value)'];
 
     const response = await getRange(client, TIMESERIES_KEY, '-', '+', ...args);
 
@@ -330,7 +330,7 @@ describe('aggregation', () => {
 
       async function runAggregation(aggregation, format) {
         await insertAggregationData();
-        const args = ['AGGREGATION', 10,  aggregation, 'value', 'FORMAT', format];
+        const args = ['AGGREGATION', 10,  `${aggregation}(value)`, 'FORMAT', format];
         return getRange(client, TIMESERIES_KEY, '-', '+', ...args);
       }
 
@@ -353,7 +353,7 @@ describe('aggregation', () => {
           }
           await insertData(client, TIMESERIES_KEY, start_ts, samples_count, data);
 
-          const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'distinct', 'job', 'FORMAT', 'json');
+          const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'distinct(job)', 'FORMAT', 'json');
 
           // for now, just make sure we have objects returned with the proper shape
           const actual = response.map(x => {
@@ -380,7 +380,7 @@ describe('aggregation', () => {
           }
           await insertData(client, TIMESERIES_KEY, start_ts, samples_count, data);
 
-          const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'count_distinct', 'state', 'FORMAT', 'json');
+          const response = await getRange(client, TIMESERIES_KEY, '-', '+', 'AGGREGATION', 10, 'count_distinct(state)', 'FORMAT', 'json');
           // convert strings to floats in server response
           const actual = response.map(([ts, data]) => {
             expect(typeof data.state.count_distinct).toEqual('object');

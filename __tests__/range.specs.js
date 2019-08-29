@@ -145,7 +145,7 @@ describe('range', () => {
     await _insert_data(TIMESERIES_KEY, start_ts, samples_count, 5);
 
     const expected = [[1488823000, 116], [1488823500, 500], [1488824000, 500], [1488824500, 384]];
-    const response = await get_range(start_ts, start_ts + samples_count, 'AGGREGATION', 500, 'count', 'value');
+    const response = await get_range(start_ts, start_ts + samples_count, 'AGGREGATION', 500, 'count(value)');
     const actual = response.map(x => [x[0], x[1].value.count]);
     expect(actual).toEqual(expected);
   });
