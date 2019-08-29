@@ -855,7 +855,7 @@ local function process_range(range, options)
     local to_hash = to_hash
 
     options = options or {}
-    local should_pick = options.labels or options.redacted
+    local should_pick = (options.labels or options.redacted) and (not options.aggregate)
     local filter = options.filter
 
     local i = 1
