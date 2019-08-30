@@ -302,7 +302,7 @@ A timeseries range can be rolled up into buckets and aggregated by means of the 
  ```
 
 - `timeBucket` - time bucket for aggregation. The units here should be the same as used when adding data.
-- `aggregation` - *avg, sum, min, max, range, count, first, last, stats, distinct, count_distinct*
+- `aggregation` - *avg, sum, min, max, median, stdev, range, count, first, last, stats, distinct, count_distinct*
 - `field` - the field to aggregate
 
 | Aggregation    | Description                                   |
@@ -312,6 +312,8 @@ A timeseries range can be rolled up into buckets and aggregated by means of the 
 | min            | minimum data value                            |
 | max            | maximum data value                            |
 | avg            | mean of values in time range                  |
+| median         | median of values in time range                |
+| stdev          | standard deviation of values in time range    |
 | count          | the number of data points                     |
 | range          | the difference between the max and min values |
 | sum            | the sum of values                             |
@@ -339,7 +341,7 @@ evalsha b91594bd37521... 1 temperatures range - + FILTER temperature>=45 LABELS 
 
 ##### REDACT <a name="option-redact"></a>
 
-`REDACT` is used to specify fields which should NOT be returned from a query or made available for aggregation. All
+`REDACT` is used to specify fields which should NOT be returned from a query. All
 fields not explicitly specified are returned (opt-out)
 
 ```
