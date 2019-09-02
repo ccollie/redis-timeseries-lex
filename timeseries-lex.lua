@@ -1627,8 +1627,6 @@ function Timeseries.merge(firstKey, secondKey, dest, min, max, ...)
 
         table.sort(bucket_list, function(a, b) return a[1] < b[1] end)
 
-        ts_debug('bucket_list = ' .. table.tostring(bucket_list) )
-
         result = {}
         for j, val in ipairs(bucket_list) do
             result[j] = { val[1], val[2] }
@@ -1666,8 +1664,6 @@ function Timeseries.merge(firstKey, secondKey, dest, min, max, ...)
     local second_range = process_range(second, params)
 
     local merged = merge(first_range, second_range)
-
-    ts_debug('Merged values. = ' .. table.tostring(merged) )
 
     return storeResult(merged, storage)
 end
