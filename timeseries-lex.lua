@@ -1586,6 +1586,91 @@ function Timeseries.copy(key, dest, min, max, ...)
     return #range
 end
 
+--- Merge the data from 2 timeseries and store it in another key
+function Timeseries.merge(firstKey, secondKey, dest, min, max, ...)
+
+    local function update_result(result, range)
+        local hash, k, ts, values
+        local name, increment
+        for _, v in ipairs(range) do
+            ts = v[1]
+            k = tostring(ts)
+            values = v[2] or {}
+
+            result[k] = result[k] or {}
+
+            hash = result[k]
+            for i = 1, #values, 2 do
+                increment = tonumber(values[i + 1])
+                if (increment ~= nil) then
+                    name = values[i]
+                    hash[name] = tonumber(hash[name] or 0) + increment
+                end
+            end
+        end
+        return result
+    end
+
+    local function merge(first, second)
+        local from_hash = from_hash
+
+        local result = update_result({}, first)
+        result = update_result(result, second)
+
+        local bucket_list = {}
+
+        local i = 1
+        for k, hash in pairs(result) do
+            bucket_list[i] = { tonumber(k),  from_hash(hash) }
+            i = i + 1
+        end
+
+        table.sort(bucket_list, function(a, b) return a[1] < b[1] end)
+
+        ts_debug('bucket_list = ' .. table.tostring(bucket_list) )
+
+        result = {}
+        for j, val in ipairs(bucket_list) do
+            result[j] = { val[1], val[2] }
+        end
+        return result
+    end
+
+    local function storeResult(range, storage)
+        storage = storage or 'timeseries'
+        if (#range) then
+            if storage == 'timeseries' then
+                storeTimeseries(dest, range)
+            else
+                storeHash(dest, range)
+            end
+        end
+
+        return #range
+    end
+
+    local MERGE_OPTIONS = {
+        LIMIT = 1,
+        FILTER = 1,
+        LABELS = 1,
+        REDACT = 1,
+        STORAGE = 1
+    }
+
+    local params = parse_range_params(MERGE_OPTIONS, min, max, ...)
+    local storage = params.storage or 'timeseries'
+    local first = base_range('zrangebylex', firstKey, params)
+    local second = base_range('zrangebylex', secondKey, params)
+
+    local first_range = process_range(first, params)
+    local second_range = process_range(second, params)
+
+    local merged = merge(first_range, second_range)
+
+    ts_debug('Merged values. = ' .. table.tostring(merged) )
+
+    return storeResult(merged, storage)
+end
 ---------
 local UpperMap
 
@@ -1611,6 +1696,8 @@ end
 
 if (command_name == 'copy') or (command_name == 'COPY') then
     return command(KEYS[1], KEYS[2], unpack(ARGV))
+elseif (command_name == 'merge') or (command_name == 'MERGE') then
+    return command(KEYS[1], KEYS[2], KEYS[3], unpack(ARGV))
 end
 
 local result = command(KEYS[1], unpack(ARGV))

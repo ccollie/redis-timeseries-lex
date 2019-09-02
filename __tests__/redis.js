@@ -182,6 +182,12 @@ async function copy(client, src, dest, min, max, ...args) {
   return client.evalsha(sha, 2, src, dest, 'copy', min, max, ...args);
 }
 
+async function merge(client, src1, src2, dest, min, max, ...args) {
+  const sha = client.scriptsSet['timeseries'].sha;
+
+  return client.evalsha(sha, 3, src1, src2, dest, 'merge', min, max, ...args);
+}
+
 module.exports = {
   createClient,
   insertData,
@@ -190,5 +196,6 @@ module.exports = {
   getRevRange,
   parseObjectResponse,
   parseMessageResponse,
-  copy
+  copy,
+  merge
 };
